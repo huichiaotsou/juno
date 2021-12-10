@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/forbole/juno/v2/logging"
 
@@ -55,6 +56,7 @@ func (w Worker) Start() {
 	logging.WorkerCount.Inc()
 
 	for i := range w.queue {
+		start := time.Now()
 		if err := w.process(i); err != nil {
 			// re-enqueue any failed job
 			// TODO: Implement exponential backoff or max retries for a block height.
@@ -63,7 +65,7 @@ func (w Worker) Start() {
 				w.queue <- i
 			}()
 		}
-
+		fmt.Println(i, time.Since(start).Milliseconds())
 		logging.WorkerHeight.WithLabelValues(fmt.Sprintf("%d", w.index)).Set(float64(i))
 	}
 }
