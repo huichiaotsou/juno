@@ -240,42 +240,41 @@ func (w Worker) ExportCommit(commit *tmtypes.Commit, vals *tmctypes.ResultValida
 func (w Worker) ExportTxs(txs []*types.Tx) error {
 	// Handle all the transactions inside the block
 	for _, tx := range txs {
-		go func() {
-			// Save the transaction itself
-			err := w.db.SaveTx(tx)
-			if err != nil {
-				fmt.Errorf("failed to handle transaction with hash %s: %s", tx.TxHash, err)
-			}
 
-			// Call the tx handlers
-			for _, module := range w.modules {
-				if transactionModule, ok := module.(modules.TransactionModule); ok {
-					err = transactionModule.HandleTx(tx)
-					if err != nil {
-						w.logger.TxError(module, tx, err)
-					}
-				}
-			}
+		// Save the transaction itself
+		err := w.db.SaveTx(tx)
+		if err != nil {
+			fmt.Errorf("failed to handle transaction with hash %s: %s", tx.TxHash, err)
+		}
 
-			// Handle all the messages contained inside the transaction
-			for i, msg := range tx.Body.Messages {
-				var stdMsg sdk.Msg
-				err = w.codec.UnpackAny(msg, &stdMsg)
+		// Call the tx handlers
+		for _, module := range w.modules {
+			if transactionModule, ok := module.(modules.TransactionModule); ok {
+				err = transactionModule.HandleTx(tx)
 				if err != nil {
-					fmt.Errorf("error while unpacking message: %s", err)
+					w.logger.TxError(module, tx, err)
 				}
+			}
+		}
 
-				// Call the handlers
-				for _, module := range w.modules {
-					if messageModule, ok := module.(modules.MessageModule); ok {
-						err = messageModule.HandleMsg(i, stdMsg, tx)
-						if err != nil {
-							w.logger.MsgError(module, tx, stdMsg, err)
-						}
+		// Handle all the messages contained inside the transaction
+		for i, msg := range tx.Body.Messages {
+			var stdMsg sdk.Msg
+			err = w.codec.UnpackAny(msg, &stdMsg)
+			if err != nil {
+				fmt.Errorf("error while unpacking message: %s", err)
+			}
+
+			// Call the handlers
+			for _, module := range w.modules {
+				if messageModule, ok := module.(modules.MessageModule); ok {
+					err = messageModule.HandleMsg(i, stdMsg, tx)
+					if err != nil {
+						w.logger.MsgError(module, tx, stdMsg, err)
 					}
 				}
 			}
-		}()
+		}
 
 	}
 

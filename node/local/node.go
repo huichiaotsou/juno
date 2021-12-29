@@ -72,6 +72,7 @@ type Node struct {
 	consensusState *cs.State
 	txIndexer      txindex.TxIndexer
 	blockIndexer   indexer.BlockIndexer
+	stateDB        dbm.DB
 }
 
 // NewNode returns a new Node instance
@@ -168,6 +169,7 @@ func NewNode(config *Details, txConfig client.TxConfig, codec codec.Marshaler) (
 		blockStore:     blockStore,
 		txIndexer:      txIndexer,
 		blockIndexer:   blockIndexer,
+		stateDB:        stateDB,
 	}, nil
 }
 
