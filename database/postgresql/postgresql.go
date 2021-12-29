@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/forbole/juno/v2/logging"
 
@@ -113,10 +112,9 @@ func (db *Database) SaveBlock(block *types.Block) error {
 INSERT INTO block (height, hash, num_txs, total_gas, proposer_address, timestamp)
 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`
 
-	currTime := time.Now()
 	proposerAddress := sql.NullString{Valid: len(block.ProposerAddress) != 0, String: block.ProposerAddress}
 	_, err := db.Sql.Exec(sqlStatement,
-		block.Height, block.Hash, block.TxNum, block.TotalGas, proposerAddress, currTime,
+		block.Height, block.Hash, block.TxNum, block.TotalGas, proposerAddress, block.Timestamp,
 	)
 	return err
 }
