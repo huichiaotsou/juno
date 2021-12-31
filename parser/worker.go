@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/forbole/juno/v2/logging"
 
@@ -199,6 +200,10 @@ func (w Worker) SaveValidators(vals []*tmtypes.Validator) error {
 func (w Worker) ExportBlock(
 	b *tmctypes.ResultBlock, r *tmctypes.ResultBlockResults, txs []*types.Tx, vals *tmctypes.ResultValidators,
 ) error {
+	// -------- Perf --------
+	startBlock := time.Now()
+	fmt.Println("Start ExportBlock for height: ", b.Block.Height)
+
 	// Save all validators
 	err := w.SaveValidators(vals.Validators)
 	if err != nil {
@@ -227,12 +232,22 @@ func (w Worker) ExportBlock(
 	// Call the block handlers
 	for _, module := range w.modules {
 		if blockModule, ok := module.(modules.BlockModule); ok {
+			// -------- Perf --------
+			startMod := time.Now()
+			fmt.Println("-- Start handle block for module: ", module.Name())
+
 			err = blockModule.HandleBlock(b, r, txs, vals)
 			if err != nil {
 				w.logger.BlockError(module, b, err)
 			}
+
+			// -------- Perf --------
+			fmt.Printf("-- Time (Milliseconds) spent on HandleBlock %v of module %s \n", time.Since(startMod).Milliseconds(), module.Name())
 		}
 	}
+
+	// -------- Perf --------
+	fmt.Println("Time (Milliseconds) spent before ExportTxs: ", time.Since(startBlock).Milliseconds())
 
 	// Export the transactions
 	return w.ExportTxs(txs)
@@ -275,13 +290,20 @@ func (w Worker) ExportCommit(commit *tmtypes.Commit, vals *tmctypes.ResultValida
 // ExportTxs accepts a slice of transactions and persists then inside the database.
 // An error is returned if the write fails.
 func (w Worker) ExportTxs(txs []*types.Tx) error {
+	// -------- Perf --------
+	startTxs := time.Now()
+	fmt.Println("Start ExportTxs")
+
 	// Handle all the transactions inside the block
 	for _, tx := range txs {
+		// -------- Perf --------
+		startTx := time.Now()
+		fmt.Println("-- Start for single Tx")
 
 		// Save the transaction itself
 		err := w.db.SaveTx(tx)
 		if err != nil {
-			fmt.Errorf("failed to handle transaction with hash %s: %s", tx.TxHash, err)
+			return fmt.Errorf("failed to handle transaction with hash %s: %s", tx.TxHash, err)
 		}
 
 		// Call the tx handlers
@@ -294,8 +316,16 @@ func (w Worker) ExportTxs(txs []*types.Tx) error {
 			}
 		}
 
+		// -------- Perf --------
+		startMsgs := time.Now()
+		fmt.Println("--- Start for handling Msgs")
+
 		// Handle all the messages contained inside the transaction
 		for i, msg := range tx.Body.Messages {
+			// -------- Perf --------
+			startMsg := time.Now()
+			fmt.Println("---- Start for handling single tx message")
+
 			var stdMsg sdk.Msg
 			err = w.codec.UnpackAny(msg, &stdMsg)
 			if err != nil {
@@ -305,15 +335,33 @@ func (w Worker) ExportTxs(txs []*types.Tx) error {
 			// Call the handlers
 			for _, module := range w.modules {
 				if messageModule, ok := module.(modules.MessageModule); ok {
+					// -------- Perf --------
+					startMsgModule := time.Now()
+					fmt.Println("----- Start for handling message module: ", module.Name())
+
 					err = messageModule.HandleMsg(i, stdMsg, tx)
 					if err != nil {
 						w.logger.MsgError(module, tx, stdMsg, err)
 					}
+					// -------- Perf --------
+					fmt.Printf("----- Time (Milliseconds) spent for handling message module: %v , module: %s \n", time.Since(startMsgModule).Milliseconds(), module.Name())
 				}
 			}
+
+			// -------- Perf --------
+			fmt.Printf("---- Time (Milliseconds) spent for handling single tx message: %v \n", time.Since(startMsg).Milliseconds())
+
 		}
+		// -------- Perf --------
+		fmt.Printf("--- Time (Milliseconds) spent for handling Msgs: %v \n", time.Since(startMsgs).Milliseconds())
+
+		// -------- Perf --------
+		fmt.Printf("-- Time (Milliseconds) spent for single Tx: %v \n", time.Since(startTx).Milliseconds())
 
 	}
+
+	// -------- Perf --------
+	fmt.Printf("Time (Milliseconds) spent for ExportTxs: %v \n", time.Since(startTxs).Milliseconds())
 
 	return nil
 }
